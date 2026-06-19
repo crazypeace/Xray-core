@@ -23,35 +23,20 @@ import (
 
 var (
 	inboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"tunnel":        func() interface{} { return new(DokodemoConfig) },
-		"dokodemo-door": func() interface{} { return new(DokodemoConfig) },
-		"http":          func() interface{} { return new(HTTPServerConfig) },
-		"shadowsocks":   func() interface{} { return new(ShadowsocksServerConfig) },
-		"mixed":         func() interface{} { return new(SocksServerConfig) },
-		"socks":         func() interface{} { return new(SocksServerConfig) },
-		"vless":         func() interface{} { return new(VLessInboundConfig) },
-		"vmess":         func() interface{} { return new(VMessInboundConfig) },
-		"trojan":        func() interface{} { return new(TrojanServerConfig) },
-		"wireguard":     func() interface{} { return &WireGuardConfig{IsClient: false} },
-		"hysteria":      func() interface{} { return new(HysteriaServerConfig) },
-		"tun":           func() interface{} { return new(TunConfig) },
+		"http":  func() interface{} { return new(HTTPServerConfig) },
+		"mixed": func() interface{} { return new(SocksServerConfig) },
+		"socks": func() interface{} { return new(SocksServerConfig) },
+		"vless": func() interface{} { return new(VLessInboundConfig) },
 	}, "protocol", "settings")
 
 	outboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"block":       func() interface{} { return new(BlackholeConfig) },
-		"blackhole":   func() interface{} { return new(BlackholeConfig) },
-		"loopback":    func() interface{} { return new(LoopbackConfig) },
-		"direct":      func() interface{} { return new(FreedomConfig) },
-		"freedom":     func() interface{} { return new(FreedomConfig) },
-		"http":        func() interface{} { return new(HTTPClientConfig) },
-		"shadowsocks": func() interface{} { return new(ShadowsocksClientConfig) },
-		"socks":       func() interface{} { return new(SocksClientConfig) },
-		"vless":       func() interface{} { return new(VLessOutboundConfig) },
-		"vmess":       func() interface{} { return new(VMessOutboundConfig) },
-		"trojan":      func() interface{} { return new(TrojanClientConfig) },
-		"hysteria":    func() interface{} { return new(HysteriaClientConfig) },
-		"dns":         func() interface{} { return new(DNSOutboundConfig) },
-		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
+		"block":     func() interface{} { return new(BlackholeConfig) },
+		"blackhole": func() interface{} { return new(BlackholeConfig) },
+		"direct":    func() interface{} { return new(FreedomConfig) },
+		"freedom":   func() interface{} { return new(FreedomConfig) },
+		"http":      func() interface{} { return new(HTTPClientConfig) },
+		"socks":     func() interface{} { return new(SocksClientConfig) },
+		"vless":     func() interface{} { return new(VLessOutboundConfig) },
 	}, "protocol", "settings")
 )
 
@@ -75,8 +60,6 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 				p = append(p, "tls")
 			case "quic":
 				p = append(p, "quic")
-			case "fakedns", "fakedns+others":
-				p = append(p, "fakedns")
 			default:
 				return nil, errors.New("unknown protocol: ", protocol)
 			}
@@ -137,10 +120,7 @@ type InboundDetourConfig struct {
 func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	receiverSettings := &proxyman.ReceiverConfig{}
 
-	// TUN inbound doesn't need port configuration as it uses network interface instead
-	if strings.ToLower(c.Protocol) == "tun" {
-		// Skip port validation for TUN
-	} else if c.ListenOn == nil {
+	if c.ListenOn == nil {
 		// Listen on anyip, must set PortList
 		if c.PortList == nil {
 			return nil, errors.New("Listen on AnyIP but no Port(s) set in InboundDetour.")
@@ -194,9 +174,6 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	rawConfig, err := inboundConfigLoader.LoadWithID(settings, c.Protocol)
 	if err != nil {
 		return nil, errors.New("failed to load inbound detour config for protocol ", c.Protocol).Base(err)
-	}
-	if dokodemoConfig, ok := rawConfig.(*DokodemoConfig); ok {
-		receiverSettings.ReceiveOriginalDestination = dokodemoConfig.FollowRedirect
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
@@ -354,14 +331,7 @@ type Config struct {
 	InboundConfigs   []InboundDetourConfig   `json:"inbounds"`
 	OutboundConfigs  []OutboundDetourConfig  `json:"outbounds"`
 	Policy           *PolicyConfig           `json:"policy"`
-	API              *APIConfig              `json:"api"`
-	Metrics          *MetricsConfig          `json:"metrics"`
 	Stats            *StatsConfig            `json:"stats"`
-	Reverse          *ReverseConfig          `json:"reverse"`
-	FakeDNS          *FakeDNSConfig          `json:"fakeDns"`
-	Observatory      *ObservatoryConfig      `json:"observatory"`
-	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
-	Version          *VersionConfig          `json:"version"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -405,33 +375,8 @@ func (c *Config) Override(o *Config, fn string) {
 	if o.Policy != nil {
 		c.Policy = o.Policy
 	}
-	if o.API != nil {
-		c.API = o.API
-	}
-	if o.Metrics != nil {
-		c.Metrics = o.Metrics
-	}
 	if o.Stats != nil {
 		c.Stats = o.Stats
-	}
-	if o.Reverse != nil {
-		c.Reverse = o.Reverse
-	}
-
-	if o.FakeDNS != nil {
-		c.FakeDNS = o.FakeDNS
-	}
-
-	if o.Observatory != nil {
-		c.Observatory = o.Observatory
-	}
-
-	if o.BurstObservatory != nil {
-		c.BurstObservatory = o.BurstObservatory
-	}
-
-	if o.Version != nil {
-		c.Version = o.Version
 	}
 
 	// update the Inbound in slice if the only one in override config has same tag
@@ -486,20 +431,6 @@ func (c *Config) Build() (*core.Config, error) {
 		},
 	}
 
-	if c.API != nil {
-		apiConf, err := c.API.Build()
-		if err != nil {
-			return nil, errors.New("failed to build API configuration").Base(err)
-		}
-		config.App = append(config.App, serial.ToTypedMessage(apiConf))
-	}
-	if c.Metrics != nil {
-		metricsConf, err := c.Metrics.Build()
-		if err != nil {
-			return nil, errors.New("failed to build metrics configuration").Base(err)
-		}
-		config.App = append(config.App, serial.ToTypedMessage(metricsConf))
-	}
 	if c.Stats != nil {
 		statsConf, err := c.Stats.Build()
 		if err != nil {
@@ -540,46 +471,6 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, errors.New("failed to build policy configuration").Base(err)
 		}
 		config.App = append(config.App, serial.ToTypedMessage(pc))
-	}
-
-	if c.Reverse != nil {
-		r, err := c.Reverse.Build()
-		if err != nil {
-			return nil, errors.New("failed to build reverse configuration").Base(err)
-		}
-		config.App = append(config.App, serial.ToTypedMessage(r))
-	}
-
-	if c.FakeDNS != nil {
-		r, err := c.FakeDNS.Build()
-		if err != nil {
-			return nil, errors.New("failed to build fake DNS configuration").Base(err)
-		}
-		config.App = append([]*serial.TypedMessage{serial.ToTypedMessage(r)}, config.App...)
-	}
-
-	if c.Observatory != nil {
-		r, err := c.Observatory.Build()
-		if err != nil {
-			return nil, errors.New("failed to build observatory configuration").Base(err)
-		}
-		config.App = append(config.App, serial.ToTypedMessage(r))
-	}
-
-	if c.BurstObservatory != nil {
-		r, err := c.BurstObservatory.Build()
-		if err != nil {
-			return nil, errors.New("failed to build burst observatory configuration").Base(err)
-		}
-		config.App = append(config.App, serial.ToTypedMessage(r))
-	}
-
-	if c.Version != nil {
-		r, err := c.Version.Build()
-		if err != nil {
-			return nil, errors.New("failed to build version configuration").Base(err)
-		}
-		config.App = append(config.App, serial.ToTypedMessage(r))
 	}
 
 	var inbounds []InboundDetourConfig

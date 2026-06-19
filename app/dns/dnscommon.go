@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
@@ -260,4 +261,13 @@ func toDnsContext(ctx context.Context, addr string) context.Context {
 		Reason: "",
 	})
 	return dnsCtx
+}
+
+// packMessage packs a DNS message into a buf.Buffer.
+func packMessage(msg *dnsmessage.Message) (*buf.Buffer, error) {
+	raw, err := msg.Pack()
+	if err != nil {
+		return nil, err
+	}
+	return buf.FromBytes(raw), nil
 }

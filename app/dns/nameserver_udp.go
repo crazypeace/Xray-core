@@ -10,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol/dns"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
@@ -130,7 +129,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 			newMsg.ID = s.newReqID()
 			newReq.msg = &newMsg
 			s.addPendingRequest(&newReq)
-			b, _ := dns.PackMessage(newReq.msg)
+			b, _ := packMessage(newReq.msg)
 			copyDest := net.UDPDestination(s.address.Address, s.address.Port)
 			b.UDP = &copyDest
 			s.udpServer.Dispatch(toDnsContext(newReq.ctx, s.address.String()), *s.address, b)
@@ -171,7 +170,7 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<
 			ctx:        ctx,
 		}
 		s.addPendingRequest(udpReq)
-		b, err := dns.PackMessage(req.msg)
+		b, err := packMessage(req.msg)
 		if err != nil {
 			errors.LogErrorInner(ctx, err, "failed to pack dns query")
 			if noResponseErrCh != nil {
